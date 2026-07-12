@@ -57,6 +57,25 @@ const CALLSIGNS = [
 	"Carding", "Ella", "Saturday", "Legba",
 ];
 
+// Pratchett-register emotional states, drawn at random per session and mixed
+// with the stable pane name: "Scunnered Vimes" today, "Chipper Vimes" tomorrow.
+const MOODS = [
+	"Scunnered", "Fashed", "Forfochten", "Swithering", "Thrawn", "Crabbit", "Wabbit", "Glaikit",
+	"Dreich", "Ramfeezled", "Vexed", "Perturbed", "Discombobulated", "Overwrought", "Melancholy", "Fretful",
+	"Truculent", "Lugubrious", "Dyspeptic", "Splenetic", "Wrathful", "Serene", "Smug", "Baffled",
+	"Befuddled", "Bewildered", "Flummoxed", "Crabby", "Cantankerous", "Grumpy", "Cheerful", "Gloomy",
+	"Morose", "Jubilant", "Perplexed", "Suspicious", "Indignant", "Sheepish", "Skittish", "Stoic",
+	"Manic", "Placid", "Peevish", "Sullen", "Giddy", "Wistful", "Frazzled", "Ornery",
+	"Huffy", "Snippy", "Testy", "Jittery", "Antsy", "Mopey", "Chipper", "Zealous",
+	"Furtive", "Brooding", "Exasperated", "Flustered", "Rattled", "Weary", "Knackered", "Chuffed",
+	"Miffed", "Narked", "Mardy", "Crotchety", "Waspish", "Livid", "Bemused", "Nonplussed",
+	"Aggrieved", "Petulant", "Maudlin", "Fey", "Stroppy", "Shirty", "Dour", "Fractious",
+	"Querulous", "Irascible", "Choleric", "Sanguine", "Phlegmatic", "Bilious", "Apoplectic", "Distraught",
+	"Forlorn", "Doleful", "Woebegone", "Crestfallen", "Despondent", "Elated", "Euphoric", "Insouciant",
+	"Blithe", "Jaunty", "Perky", "Twitchy", "Haunted", "Harried", "Hangdog", "Grim",
+	"Bursarial", "Gnomic",
+];
+
 function hash(value: string): number {
 	let h = 5381;
 	for (let i = 0; i < value.length; i += 1) h = (h * 33) ^ value.charCodeAt(i);
@@ -97,22 +116,26 @@ export default function herdrCallsign(pi: ExtensionAPI) {
 				return;
 			}
 
-			const taken = new Set(
+			// Other agents' base names ("Scunnered Vimes" -> "Vimes") block reuse.
+			const takenBases = new Set(
 				agents
 					.filter((agent) => agent.pane_id !== paneId)
 					.map((agent) => (typeof agent.name === "string" ? agent.name.trim() : ""))
-					.filter(Boolean),
+					.filter(Boolean)
+					.map((name) => name.split(" ").at(-1) as string),
 			);
 			const start = hash(paneId) % CALLSIGNS.length;
-			let callsign: string | undefined;
+			let base: string | undefined;
 			for (let step = 0; step < CALLSIGNS.length; step += 1) {
 				const candidate = CALLSIGNS[(start + step) % CALLSIGNS.length];
-				if (!taken.has(candidate)) {
-					callsign = candidate;
+				if (!takenBases.has(candidate)) {
+					base = candidate;
 					break;
 				}
 			}
-			if (!callsign) callsign = `${CALLSIGNS[start]}-${paneId.replaceAll(":", "-")}`;
+			if (!base) base = `${CALLSIGNS[start]}-${paneId.replaceAll(":", "-")}`;
+			const mood = MOODS[Math.floor(Math.random() * MOODS.length)];
+			const callsign = `${mood} ${base}`;
 
 			execFileSync("herdr", ["agent", "rename", paneId, callsign], {
 				stdio: "ignore",

@@ -1,0 +1,24 @@
+id = "herdr-pings"
+name = "Herdr Pings"
+version = "0.1.0"
+description = "Turn-level wake events for agents in herdr panes — appends pane lifecycle events to the herdr-pings spool and ships doctor/setup actions."
+min_herdr_version = "0.7.0"
+platforms = ["macos", "linux"]
+
+[[events]]
+on = "pane.exited"
+command = ["bun", "bridge/lifecycle.js"]
+
+[[events]]
+on = "pane.closed"
+command = ["bun", "bridge/lifecycle.js"]
+
+[[actions]]
+id = "doctor"
+title = "Check herdr-pings"
+command = ["bun", "actions/doctor.ts"]
+
+[[actions]]
+id = "setup"
+title = "Set up herdr-pings home links"
+command = ["bun", "actions/setup.ts"]

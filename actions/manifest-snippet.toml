@@ -1,0 +1,9 @@
+[[actions]]
+id = "doctor"
+title = "Check herdr-pings"
+command = ["bun", "actions/doctor.ts"]
+
+[[actions]]
+id = "setup"
+title = "Set up herdr-pings home links"
+command = ["bun", "actions/setup.ts"]

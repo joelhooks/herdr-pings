@@ -1,0 +1,13 @@
+id = "herdr-pings"
+name = "Herdr Pings"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+platforms = ["macos", "linux"]
+
+[[events]]
+on = "pane.exited"
+command = ["bun", "bridge/lifecycle.js"]
+
+[[events]]
+on = "pane.closed"
+command = ["bun", "bridge/lifecycle.js"]

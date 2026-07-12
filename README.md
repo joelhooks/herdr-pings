@@ -1,6 +1,6 @@
 # herdr-pings
 
-Turn-level wake events for agents in [herdr](https://github.com/mistweaverco/herdr) panes.
+Turn-level wake events for agents in [herdr](https://github.com/ogulcancelik/herdr) panes.
 
 This repo contains:
 
@@ -19,7 +19,7 @@ Records may include extra fields such as `session`, `turn_index`, `last_message_
 
 ## Install
 
-Requires [Pi](https://github.com/badlogic/pi-mono), [herdr](https://github.com/mistweaverco/herdr), and [Bun](https://bun.sh/).
+Requires [Pi](https://github.com/badlogic/pi-mono), [herdr](https://github.com/ogulcancelik/herdr), and [Bun](https://bun.sh/).
 
 Clone the repo:
 

@@ -6,6 +6,11 @@ This repo contains:
 
 - `herdr-turn-ping/`: a Pi extension that appends one event after a run fully settles.
 - `herdr-ping-wait/`: a Bun CLI that waits for and consumes the next complete event.
+- `herdr-name-sync/`: a Pi extension that mirrors the session name onto the herdr pane label.
+- `herdr-callsign/`: a Pi extension that gives each worker a stable Discworld callsign as its herdr agent name (agent names are herdr send/wait targets), stamped onto spool events as `callsign`.
+- `bridge/` + `actions/` + `herdr-plugin.toml`: a herdr plugin that appends `pane_exited`/`pane_closed` to the same spool (crash detection for any pane), raises error-only toasts, and ships `setup`/`doctor` actions.
+
+Preferred install is the herdr plugin: `herdr plugin install joelhooks/herdr-pings`, then invoke the `setup` action. The manual symlink steps below remain for pi-only use.
 
 ## Spool contract
 

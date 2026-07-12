@@ -18,6 +18,10 @@ const links = [
     target: join(pluginRoot, "herdr-name-sync"),
   },
   {
+    path: join(homedir(), ".pi", "agent", "extensions", "herdr-callsign"),
+    target: join(pluginRoot, "herdr-callsign"),
+  },
+  {
     path: join(homedir(), ".local", "bin", "herdr-ping-wait"),
     target: join(pluginRoot, "herdr-ping-wait", "herdr-ping-wait.ts"),
   },

@@ -132,6 +132,8 @@ export default function herdrTurnPing(pi: ExtensionAPI) {
 		};
 
 		if (session) record.session = session;
+		const callsign = process.env.HERDR_CALLSIGN?.trim();
+		if (callsign) record.callsign = callsign;
 		if (latestTurnIndex !== undefined) record.turn_index = latestTurnIndex;
 		if (lastMessageTail !== undefined) record.last_message_tail = lastMessageTail;
 		if (message?.stopReason === "error" && message.errorMessage) {

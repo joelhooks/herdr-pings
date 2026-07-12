@@ -77,6 +77,9 @@ line(extension.ok, "pi extension", extension.detail);
 const nameSync = await validLink(join(homedir(), ".pi", "agent", "extensions", "herdr-name-sync"), join(pluginRoot, "herdr-name-sync"));
 line(nameSync.ok, "name-sync extension", nameSync.detail);
 
+const callsign = await validLink(join(homedir(), ".pi", "agent", "extensions", "herdr-callsign"), join(pluginRoot, "herdr-callsign"));
+line(callsign.ok, "callsign extension", callsign.detail);
+
 const cli = await validLink(join(homedir(), ".local", "bin", "herdr-ping-wait"), expectedCli);
 let cliOnPath = false;
 try {

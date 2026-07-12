@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -13,12 +13,16 @@ type CachedAssistant = {
 };
 
 type CurrentPaneResponse = {
-	result?: { pane?: { pane_id?: unknown } };
+	result?: { pane?: { pane_id?: unknown; label?: unknown } };
 };
 
-function resolvePaneId(): string | undefined {
+type PaneIdentity = {
+	paneId: string;
+	label: string;
+};
+
+function resolvePane(): PaneIdentity | undefined {
 	const fromEnvironment = process.env.HERDR_PANE_ID?.trim();
-	if (fromEnvironment) return fromEnvironment;
 
 	try {
 		const output = execFileSync("herdr", ["pane", "current"], {
@@ -26,11 +30,41 @@ function resolvePaneId(): string | undefined {
 			stdio: ["ignore", "pipe", "ignore"],
 			timeout: 2_000,
 		});
-		const paneId = (JSON.parse(output) as CurrentPaneResponse).result?.pane?.pane_id;
-		return typeof paneId === "string" && paneId.trim() ? paneId.trim() : undefined;
-	} catch {
-		return undefined;
-	}
+		const pane = (JSON.parse(output) as CurrentPaneResponse).result?.pane;
+		const paneId = typeof pane?.pane_id === "string" ? pane.pane_id.trim() : "";
+		if (paneId && (!fromEnvironment || paneId === fromEnvironment)) {
+			const label = typeof pane?.label === "string" ? pane.label.trim() : "";
+			return { paneId, label: label || paneId };
+		}
+	} catch {}
+
+	return fromEnvironment ? { paneId: fromEnvironment, label: fromEnvironment } : undefined;
+}
+
+function errorHead(error: string | undefined): string {
+	return (error?.split("\n", 1)[0]?.trim() || "Pi turn failed").slice(0, 120);
+}
+
+function showErrorNotification(label: string, error: string | undefined): void {
+	if (!process.env.HERDR_SOCKET_PATH) return;
+
+	try {
+		const child = spawn(
+			"herdr",
+			[
+				"notification",
+				"show",
+				`${label} errored`,
+				"--body",
+				errorHead(error),
+				"--sound",
+				"request",
+			],
+			{ detached: true, stdio: "ignore" },
+		);
+		child.on("error", () => {});
+		child.unref();
+	} catch {}
 }
 
 function assistantText(message: CachedAssistant | undefined): string {
@@ -60,8 +94,9 @@ function safeFilename(paneId: string): string {
 }
 
 export default function herdrTurnPing(pi: ExtensionAPI) {
-	const paneId = resolvePaneId();
-	if (!paneId) return;
+	const pane = resolvePane();
+	if (!pane) return;
+	const { paneId } = pane;
 
 	const spoolDirectory = join(homedir(), ".local", "state", "herdr-pings");
 	const spoolPath = join(spoolDirectory, safeFilename(paneId));
@@ -108,6 +143,9 @@ export default function herdrTurnPing(pi: ExtensionAPI) {
 			.then(async () => {
 				await mkdir(spoolDirectory, { recursive: true });
 				await appendFile(spoolPath, line, "utf8");
+				if (record.event === "turn_error") {
+					showErrorNotification(pane.label, message?.errorMessage);
+				}
 			})
 			.catch((error: unknown) => {
 				if (notifiedOfWriteFailure) return;

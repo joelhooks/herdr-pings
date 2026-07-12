@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -13,6 +14,28 @@ function paneData(payload) {
   if (!payload || typeof payload !== "object") return undefined;
   if (payload.data && typeof payload.data === "object") return payload.data;
   return payload;
+}
+
+function showErrorNotification(label, body) {
+  if (!process.env.HERDR_SOCKET_PATH) return;
+
+  try {
+    const child = spawn(
+      "herdr",
+      [
+        "notification",
+        "show",
+        `${label} errored`,
+        "--body",
+        body.slice(0, 120),
+        "--sound",
+        "request",
+      ],
+      { detached: true, stdio: "ignore" },
+    );
+    child.on("error", () => {});
+    child.unref();
+  } catch {}
 }
 
 function main() {
@@ -60,6 +83,16 @@ function main() {
       0o600,
     );
     fs.writeSync(descriptor, `${JSON.stringify(record)}\n`);
+    if (event === "pane_exited") {
+      const label =
+        (typeof data.label === "string" && data.label.trim()) ||
+        (typeof data.agent === "string" && data.agent.trim()) ||
+        paneId;
+      const body = Number.isInteger(data.exit_code)
+        ? `Pane process exited with code ${data.exit_code}`
+        : "Pane process exited unexpectedly";
+      showErrorNotification(label, body);
+    }
   } catch (error) {
     console.error(`herdr-pings: could not append ${spoolPath}: ${error.message}`);
   } finally {

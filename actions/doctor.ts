@@ -15,6 +15,13 @@ const pluginRoot = process.env.HERDR_PLUGIN_ROOT?.trim()
   : resolve(import.meta.dir, "..");
 const expectedExtension = join(pluginRoot, "herdr-turn-ping");
 const expectedCli = join(pluginRoot, "herdr-ping-wait", "herdr-ping-wait.ts");
+const expectedWhois = join(pluginRoot, "herdr-whois", "herdr-whois.ts");
+const hexErrors = [
+  "+++ Out Of Cheese Error. Redo From Start +++",
+  "+++ Divide By Cucumber Error. Please Reinstall Universe And Reboot +++",
+  "+++ Whoops! Here Comes The Cheese! +++",
+  "+++ Mr. Jelly! Mr. Jelly! Error At Address 14, Treacle Mine Road +++",
+];
 let failed = false;
 
 function line(ok: boolean, label: string, detail: string): void {
@@ -88,6 +95,14 @@ try {
 } catch {}
 line(cli.ok && cliOnPath, "wait CLI", cli.ok ? (cliOnPath ? `${cli.detail}; on PATH` : "valid symlink but not on PATH") : cli.detail);
 
+const whois = await validLink(join(homedir(), ".local", "bin", "herdr-whois"), expectedWhois);
+let whoisOnPath = false;
+try {
+  const { stdout } = await execFileAsync("sh", ["-lc", "command -v herdr-whois"], { timeout: 2_000 });
+  whoisOnPath = stdout.trim().length > 0;
+} catch {}
+line(whois.ok && whoisOnPath, "whois CLI", whois.ok ? (whoisOnPath ? `${whois.detail}; on PATH` : "valid symlink but not on PATH") : whois.detail);
+
 try {
   await access(stateDir, constants.W_OK);
   const info = await stat(stateDir);
@@ -148,4 +163,11 @@ try {
   }
 }
 
-process.exitCode = failed ? 1 : 0;
+if (failed) {
+  console.log(hexErrors[Math.floor(Math.random() * hexErrors.length)]);
+  process.exitCode = 1;
+} else {
+  console.log("FABRICATI DIEM, PVNC");
+  console.log("GNU Terry Pratchett");
+  process.exitCode = 0;
+}

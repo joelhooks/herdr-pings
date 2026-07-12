@@ -22,3 +22,8 @@ command = ["bun", "actions/doctor.ts"]
 id = "setup"
 title = "Set up herdr-pings home links"
 command = ["bun", "actions/setup.ts"]
+
+[[actions]]
+id = "luggage"
+title = "Let the Luggage clean old spools"
+command = ["bun", "actions/luggage.ts"]

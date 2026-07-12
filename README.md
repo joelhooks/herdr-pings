@@ -12,6 +12,15 @@ This repo contains:
 
 Preferred install is the herdr plugin: `herdr plugin install joelhooks/herdr-pings`, then invoke the `setup` action. The manual symlink steps below remain for pi-only use.
 
+## The fun parts
+
+- **Whois:** `herdr-whois` gives a live roll call with callsigns, pane labels, and each worker's latest event. Add `--all` to see the departed.
+- **The Luggage:** `herdr plugin action invoke luggage --plugin herdr-pings` eats only dead-pane spool debris older than seven days and orphaned cursor entries. It announces the menu before dining.
+- **Death notices:** closed and exited panes leave lifecycle events behind, with error-only toasts when a worker dies badly.
+- **Hex errors:** a failing doctor signs off with one of Hex's deeply unhelpful errors.
+- **Mood drift:** moods drift with events; after three straight errors the worker is renamed Rincewind.
+- **GNU Terry Pratchett:** a healthy doctor keeps the clacks overhead moving.
+
 ## Spool contract
 
 Events are appended to `~/.local/state/herdr-pings/<pane-id-with-dashes>.jsonl`. Each JSONL record requires:

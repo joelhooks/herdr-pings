@@ -83,6 +83,7 @@ function hash(value: string): number {
 }
 
 type AgentEntry = { pane_id?: unknown; name?: unknown };
+type CachedAssistant = { stopReason?: string };
 
 function herdrJson(args: string[]): unknown {
 	const output = execFileSync("herdr", args, {
@@ -98,6 +99,29 @@ export default function herdrCallsign(pi: ExtensionAPI) {
 	if (!paneId || !process.env.HERDR_SOCKET_PATH) return;
 
 	let assigned = false;
+	let ownsCallsign = false;
+	let base: string | undefined;
+	let originalMood: string | undefined;
+	let currentCallsign: string | undefined;
+	let latestAssistant: CachedAssistant | undefined;
+	let runStartedAt: number | undefined;
+	let consecutiveErrors = 0;
+	let consecutiveCleans = 0;
+	let errorLevel = 0;
+
+	const rename = (callsign: string) => {
+		if (!ownsCallsign || callsign === currentCallsign) return;
+		try {
+			execFileSync("herdr", ["agent", "rename", paneId, callsign], {
+				stdio: "ignore",
+				timeout: 2_000,
+			});
+			currentCallsign = callsign;
+			process.env.HERDR_CALLSIGN = callsign;
+		} catch {
+			// A failed rename is not a transition; retry if a later event wants it.
+		}
+	};
 
 	const tryAssign = () => {
 		if (assigned) return;
@@ -125,7 +149,6 @@ export default function herdrCallsign(pi: ExtensionAPI) {
 					.map((name) => name.split(" ").at(-1) as string),
 			);
 			const start = hash(paneId) % CALLSIGNS.length;
-			let base: string | undefined;
 			for (let step = 0; step < CALLSIGNS.length; step += 1) {
 				const candidate = CALLSIGNS[(start + step) % CALLSIGNS.length];
 				if (!takenBases.has(candidate)) {
@@ -134,20 +157,71 @@ export default function herdrCallsign(pi: ExtensionAPI) {
 				}
 			}
 			if (!base) base = `${CALLSIGNS[start]}-${paneId.replaceAll(":", "-")}`;
-			const mood = MOODS[Math.floor(Math.random() * MOODS.length)];
-			const callsign = `${mood} ${base}`;
+			originalMood = MOODS[Math.floor(Math.random() * MOODS.length)];
+			const callsign = `${originalMood} ${base}`;
 
 			execFileSync("herdr", ["agent", "rename", paneId, callsign], {
 				stdio: "ignore",
 				timeout: 2_000,
 			});
 			process.env.HERDR_CALLSIGN = callsign;
+			currentCallsign = callsign;
+			ownsCallsign = true;
 			assigned = true;
 		} catch {
 			// herdr busy/absent — retry at the next turn boundary
 		}
 	};
 
-	pi.on("agent_start", tryAssign);
-	pi.on("agent_settled", tryAssign);
+	pi.on("agent_start", () => {
+		tryAssign();
+		latestAssistant = undefined;
+		runStartedAt = Date.now();
+	});
+
+	pi.on("agent_end", (event) => {
+		latestAssistant = [...event.messages]
+			.reverse()
+			.find((message) => message.role === "assistant") as CachedAssistant | undefined;
+	});
+
+	pi.on("agent_settled", () => {
+		tryAssign();
+		if (!ownsCallsign || !base || !originalMood) return;
+
+		const errored = latestAssistant?.stopReason === "error";
+		const ranLong = runStartedAt !== undefined && Date.now() - runStartedAt > 10 * 60 * 1_000;
+		runStartedAt = undefined;
+
+		if (errored) {
+			consecutiveErrors += 1;
+			consecutiveCleans = 0;
+			errorLevel = Math.min(3, consecutiveErrors);
+			if (errorLevel === 1) rename(`Vexed ${base}`);
+			else if (errorLevel === 2) rename(`Apoplectic ${base}`);
+			else {
+				// Rincewind is a temporary demotion; recovery restores the resident base.
+				rename("Rincewind");
+			}
+			return;
+		}
+
+		consecutiveCleans += 1;
+		consecutiveErrors = 0;
+		if (errorLevel >= 2) {
+			errorLevel = 1;
+			rename(`Vexed ${base}`);
+			return;
+		}
+		if (errorLevel === 1) {
+			errorLevel = 0;
+			rename(`${originalMood} ${base}`);
+			return;
+		}
+		if (ranLong) {
+			rename(`Forfochten ${base}`);
+			return;
+		}
+		if (consecutiveCleans >= 2) rename(`Serene ${base}`);
+	});
 }

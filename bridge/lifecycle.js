@@ -10,6 +10,22 @@ const EVENT_NAMES = new Map([
   ["pane.closed", "pane_closed"],
 ]);
 
+const DEATH_LINES = [
+  (name) => `THE PANE BELONGING TO ${name} HAS ENDED. DO NOT THINK OF IT AS DYING. THINK OF IT AS LEAVING EARLY TO AVOID THE RUSH.`,
+  (name) => `${name}. COME WITH ME.`,
+  () => "THERE IS NO JUSTICE. THERE IS JUST ME. AND ONE FEWER PANE.",
+  (name) => `I AM HERE FOR ${name}. IT APPEARS THE PANE HAS FINISHED BEFORE THE REST OF YOU.`,
+  (name) => `${name} HAS REACHED THE END. THIS OFTEN HAPPENS TO THINGS THAT BEGIN.`,
+  (name) => `DO NOT BE ALARMED. ${name} IS NO LONGER RUNNING. I AM TOLD HUMANS FIND THIS INCONVENIENT.`,
+  (name) => `THE PANE CALLED ${name} HAS STOPPED. I HAVE ALWAYS FOUND STOPPING TO BE VERY FINAL.`,
+  (name) => `${name} HAS DEPARTED. THERE WAS NO NEED TO PACK.`,
+];
+
+function deathLine(label) {
+  const name = label.toUpperCase();
+  return DEATH_LINES[Math.floor(Math.random() * DEATH_LINES.length)](name);
+}
+
 function paneData(payload) {
   if (!payload || typeof payload !== "object") return undefined;
   if (payload.data && typeof payload.data === "object") return payload.data;
@@ -27,7 +43,7 @@ function showErrorNotification(label, body) {
         "show",
         `${label} errored`,
         "--body",
-        body.slice(0, 120),
+        body.slice(0, 200),
         "--sound",
         "request",
       ],
@@ -88,10 +104,7 @@ function main() {
         (typeof data.label === "string" && data.label.trim()) ||
         (typeof data.agent === "string" && data.agent.trim()) ||
         paneId;
-      const body = Number.isInteger(data.exit_code)
-        ? `Pane process exited with code ${data.exit_code}`
-        : "Pane process exited unexpectedly";
-      showErrorNotification(label, body);
+      showErrorNotification(label, deathLine(label));
     }
   } catch (error) {
     console.error(`herdr-pings: could not append ${spoolPath}: ${error.message}`);

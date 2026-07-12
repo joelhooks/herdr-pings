@@ -25,6 +25,10 @@ const links = [
     path: join(homedir(), ".local", "bin", "herdr-ping-wait"),
     target: join(pluginRoot, "herdr-ping-wait", "herdr-ping-wait.ts"),
   },
+  {
+    path: join(homedir(), ".local", "bin", "herdr-whois"),
+    target: join(pluginRoot, "herdr-whois", "herdr-whois.ts"),
+  },
 ];
 const spoolDirectory = join(homedir(), ".local", "state", "herdr-pings");
 
@@ -32,11 +36,11 @@ async function ensureDirectory(path: string): Promise<void> {
   try {
     const info = await lstat(path);
     if (!info.isDirectory()) throw new Error(`${path} exists but is not a directory`);
-    console.log(`unchanged directory ${path}`);
+    console.log(`The thpool directory ith ready. ${path}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     await mkdir(path, { recursive: true });
-    console.log(`created directory ${path}`);
+    console.log(`Yeth, marthter — created directory ${path}`);
   }
 }
 
@@ -46,23 +50,23 @@ async function ensureLink(path: string, target: string): Promise<void> {
   try {
     const info = await lstat(path);
     if (info.isSymbolicLink() && resolve(dirname(path), await readlink(path)) === target) {
-      console.log(`unchanged symlink ${path} -> ${target}`);
+      console.log(`Yeth, marthter — unchanged thymlink ${path} -> ${target}`);
       return;
     }
     await unlink(path);
-    console.log(`removed ${path}`);
+    console.log(`Yeth, marthter — removed ${path}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
 
   await symlink(target, path);
-  console.log(`created symlink ${path} -> ${target}`);
+  console.log(`Yeth, marthter — created thymlink ${path} -> ${target}`);
 }
 
 try {
   await ensureDirectory(spoolDirectory);
   for (const link of links) await ensureLink(link.path, link.target);
 } catch (error) {
-  console.error(`setup failed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`The thurgery failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 }

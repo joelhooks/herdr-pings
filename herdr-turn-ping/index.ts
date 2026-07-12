@@ -5,6 +5,16 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const TAIL_LIMIT = 500;
+const TOAST_BODY_LIMIT = 200;
+
+const HEX_ERRORS = [
+	"+++ Out Of Cheese Error. Redo From Start +++",
+	"+++ Divide By Cucumber Error. Please Reinstall Universe And Reboot +++",
+	"+++ Melon Melon Melon +++",
+	"+++ Whoops! Here Comes The Cheese! +++",
+	"+++ Mine! Waah! +++",
+	"+++ Error At Address: 14, Treacle Mine Road +++",
+];
 
 type CachedAssistant = {
 	content?: unknown;
@@ -41,8 +51,12 @@ function resolvePane(): PaneIdentity | undefined {
 	return fromEnvironment ? { paneId: fromEnvironment, label: fromEnvironment } : undefined;
 }
 
-function errorHead(error: string | undefined): string {
-	return (error?.split("\n", 1)[0]?.trim() || "Pi turn failed").slice(0, 120);
+function errorToastBody(error: string | undefined): string {
+	const garnish = HEX_ERRORS[Math.floor(Math.random() * HEX_ERRORS.length)];
+	const separator = " ";
+	const available = TOAST_BODY_LIMIT - garnish.length - separator.length;
+	const head = error?.split("\n", 1)[0]?.trim() || "Pi turn failed";
+	return `${garnish}${separator}${head.slice(0, available)}`;
 }
 
 function showErrorNotification(label: string, error: string | undefined): void {
@@ -56,7 +70,7 @@ function showErrorNotification(label: string, error: string | undefined): void {
 				"show",
 				`${label} errored`,
 				"--body",
-				errorHead(error),
+				errorToastBody(error),
 				"--sound",
 				"request",
 			],

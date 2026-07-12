@@ -74,6 +74,9 @@ async function inspectSpool(path: string): Promise<{ age: string; malformed: num
 const extension = await validLink(join(homedir(), ".pi", "agent", "extensions", "herdr-turn-ping"), expectedExtension);
 line(extension.ok, "pi extension", extension.detail);
 
+const nameSync = await validLink(join(homedir(), ".pi", "agent", "extensions", "herdr-name-sync"), join(pluginRoot, "herdr-name-sync"));
+line(nameSync.ok, "name-sync extension", nameSync.detail);
+
 const cli = await validLink(join(homedir(), ".local", "bin", "herdr-ping-wait"), expectedCli);
 let cliOnPath = false;
 try {

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ConvexReporter, paneEvent } from "../bridge/convex-reporter.js";
 
 /**
  * Mirrors the pi session name onto the herdr pane label. Sessions set their
@@ -16,6 +17,10 @@ export default function herdrNameSync(pi: ExtensionAPI) {
 	if (!paneId || !process.env.HERDR_SOCKET_PATH) return;
 
 	let lastSynced: string | undefined;
+	const convex = new ConvexReporter({
+		onDrop: ({ count, droppedEvents, reason }: { count: number; droppedEvents: number; reason: string }) =>
+			console.error(`herdr-name-sync: dropped ${count} Convex event(s), ${droppedEvents} total: ${reason}`),
+	});
 
 	const sync = () => {
 		let name: string | undefined;
@@ -26,6 +31,7 @@ export default function herdrNameSync(pi: ExtensionAPI) {
 		}
 		if (!name || name === lastSynced) return;
 		lastSynced = name;
+		convex.enqueue(paneEvent("pane_renamed", { pane_id: paneId, label: name, agent: "pi" }));
 		try {
 			const child = spawn("herdr", ["pane", "rename", paneId, name], {
 				detached: true,

@@ -3,6 +3,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ConvexReporter, boundedSummary, paneEvent } from "../bridge/convex-reporter.js";
 
 const TAIL_LIMIT = 500;
 const TOAST_BODY_LIMIT = 200;
@@ -20,6 +21,12 @@ type CachedAssistant = {
 	content?: unknown;
 	stopReason?: string;
 	errorMessage?: string;
+	usage?: {
+		input?: number;
+		output?: number;
+		cacheRead?: number;
+		totalTokens?: number;
+	};
 };
 
 type CurrentPaneResponse = {
@@ -119,6 +126,10 @@ export default function herdrTurnPing(pi: ExtensionAPI) {
 	let session: string | undefined;
 	let writeQueue = Promise.resolve();
 	let notifiedOfWriteFailure = false;
+	const convex = new ConvexReporter({
+		onDrop: ({ count, droppedEvents, reason }: { count: number; droppedEvents: number; reason: string }) =>
+			console.error(`herdr-turn-ping: dropped ${count} Convex event(s), ${droppedEvents} total: ${reason}`),
+	});
 
 	pi.on("agent_start", () => {
 		latestAssistant = undefined;
@@ -153,6 +164,16 @@ export default function herdrTurnPing(pi: ExtensionAPI) {
 		if (message?.stopReason === "error" && message.errorMessage) {
 			record.error = message.errorMessage;
 		}
+
+		const convexEvent = paneEvent(record.event as string, {
+			...record,
+			summary_line: boundedSummary(lastMessageTail),
+			input_tokens: message?.usage?.input,
+			output_tokens: message?.usage?.output,
+			cache_read_tokens: message?.usage?.cacheRead,
+			total_tokens: message?.usage?.totalTokens,
+		});
+		convex.enqueue(convexEvent);
 
 		const line = `${JSON.stringify(record)}\n`;
 		writeQueue = writeQueue

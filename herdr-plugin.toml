@@ -13,6 +13,15 @@ command = ["bun", "bridge/lifecycle.js"]
 on = "pane.closed"
 command = ["bun", "bridge/lifecycle.js"]
 
+# Convex-only hooks are additive: they never touch the production spool files.
+[[events]]
+on = "pane.created"
+command = ["bun", "bridge/convex-event.js"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["bun", "bridge/convex-event.js"]
+
 [[actions]]
 id = "doctor"
 title = "Check herdr-pings"

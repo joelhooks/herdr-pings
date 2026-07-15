@@ -7,6 +7,24 @@ const DEFAULT_MAX_BATCH_SIZE = 20;
 const DEFAULT_FLUSH_DELAY_MS = 250;
 const SUMMARY_LIMIT = 280;
 
+// Bridge processes are spawned fresh per pane event by the herdr server, whose own env
+// can't change without a server restart (which would take Joel's pane wall with it).
+// A config file read at spawn time is the restart-free path; env vars still win.
+function fileConfig() {
+  try {
+    const home = process.env.HOME;
+    if (!home) return {};
+    const raw = require("node:fs").readFileSync(
+      `${home}/.local/state/herdr-pings/convex.json`,
+      "utf8",
+    );
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function configuredEndpoint(url = process.env.HERDR_PINGS_CONVEX_URL) {
   const base = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
   return base ? `${base}/herdr-pings/ingest` : undefined;
@@ -89,8 +107,8 @@ function pluginEventFromEnvironment(environment = process.env) {
 
 class ConvexReporter {
   constructor({
-    url = process.env.HERDR_PINGS_CONVEX_URL,
-    token = process.env.HERDR_PINGS_CONVEX_TOKEN,
+    url = process.env.HERDR_PINGS_CONVEX_URL ?? fileConfig().url,
+    token = process.env.HERDR_PINGS_CONVEX_TOKEN ?? fileConfig().token,
     fetchImpl = globalThis.fetch,
     maxBufferedEvents = DEFAULT_MAX_BUFFERED_EVENTS,
     maxBatchSize = DEFAULT_MAX_BATCH_SIZE,

@@ -3,34 +3,79 @@ import { describe, expect, test } from "bun:test";
 import {
   ConvexReporter,
   boundedSummary,
+  createHerdrLabelLookup,
   paneEvent,
   pluginEventFromEnvironment,
 } from "./convex-reporter.js";
 
 describe("ConvexReporter", () => {
-  test("maps status events without scrollback", () => {
-    const event = pluginEventFromEnvironment({
-      HERDR_PLUGIN_EVENT: "pane.agent_status_changed",
-      HERDR_PLUGIN_EVENT_JSON: JSON.stringify({
-        data: {
-          pane_id: "wB:p2",
-          workspace_id: "wB",
-          label: "Bridge worker",
-          agent: "pi",
-          agent_status: "working",
-        },
-      }),
-    });
+  test("enriches status events with workspace and tab labels without scrollback", () => {
+    const event = pluginEventFromEnvironment(
+      {
+        HERDR_PLUGIN_EVENT: "pane.agent_status_changed",
+        HERDR_PLUGIN_EVENT_JSON: JSON.stringify({
+          data: {
+            pane_id: "wB:p2",
+            workspace_id: "wB",
+            tab_id: "wB:t1",
+            label: "Bridge worker",
+            agent: "pi",
+            agent_status: "working",
+          },
+        }),
+      },
+      () => ({ workspaceLabel: "Daily paper + memory ops", tabLabel: "Live panes" }),
+    );
 
     expect(event).toMatchObject({
       kind: "agent_status_changed",
       paneId: "wB:p2",
       workspaceId: "wB",
+      workspaceLabel: "Daily paper + memory ops",
+      tabId: "wB:t1",
+      tabLabel: "Live panes",
       label: "Bridge worker",
       agentKind: "pi",
       status: "working",
     });
     expect(event).not.toHaveProperty("lastMessageTail");
+  });
+
+  test("omits unavailable workspace and tab labels", () => {
+    const event = pluginEventFromEnvironment(
+      {
+        HERDR_PLUGIN_EVENT: "pane.created",
+        HERDR_PLUGIN_EVENT_JSON: JSON.stringify({
+          data: { pane_id: "wB:p2", workspace_id: "wB", tab_id: "wB:t1" },
+        }),
+      },
+      () => ({}),
+    );
+
+    expect(event).toMatchObject({ paneId: "wB:p2", workspaceId: "wB", tabId: "wB:t1" });
+    expect(event).not.toHaveProperty("workspaceLabel");
+    expect(event).not.toHaveProperty("tabLabel");
+  });
+
+  test("caches one Herdr listing per bridge process", () => {
+    let reads = 0;
+    const lookup = createHerdrLabelLookup(() => {
+      reads += 1;
+      return {
+        workspaces: new Map([["wB", "Daily paper + memory ops"]]),
+        tabs: new Map([["wB:t1", "Live panes"]]),
+      };
+    });
+
+    expect(lookup({ workspace_id: "wB", tab_id: "wB:t1" })).toEqual({
+      workspaceLabel: "Daily paper + memory ops",
+      tabLabel: "Live panes",
+    });
+    expect(lookup({ workspace_id: "wB", tab_id: "wB:t1" })).toEqual({
+      workspaceLabel: "Daily paper + memory ops",
+      tabLabel: "Live panes",
+    });
+    expect(reads).toBe(1);
   });
 
   test("marks exited panes closed without changing the spool event", () => {

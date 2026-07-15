@@ -2,9 +2,13 @@
  * Optional, memory-only delivery to the local Convex pane event endpoint.
  * It deliberately never reads or writes herdr-pings spool files.
  */
+const { execFileSync } = require("node:child_process");
+const { existsSync } = require("node:fs");
+
 const DEFAULT_MAX_BUFFERED_EVENTS = 100;
 const DEFAULT_MAX_BATCH_SIZE = 20;
 const DEFAULT_FLUSH_DELAY_MS = 250;
+const HERDR_LOOKUP_TIMEOUT_MS = 750;
 const SUMMARY_LIMIT = 280;
 
 // Bridge processes are spawned fresh per pane event by the herdr server, whose own env
@@ -42,6 +46,74 @@ function asNonNegativeInteger(value) {
     : undefined;
 }
 
+function sourceText(data, ...keys) {
+  for (const key of keys) {
+    if (typeof data[key] === "string" && data[key].trim()) {
+      return data[key].trim().slice(0, SUMMARY_LIMIT);
+    }
+  }
+  return undefined;
+}
+
+function listResult(stdout, key, idKey) {
+  try {
+    const parsed = JSON.parse(stdout);
+    const rows = parsed?.result?.[key];
+    if (!Array.isArray(rows)) return new Map();
+    return new Map(
+      rows.flatMap((row) => {
+        const id = sourceText(row ?? {}, idKey);
+        const label = sourceText(row ?? {}, "label");
+        return id && label ? [[id, label]] : [];
+      }),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+function herdrBinary() {
+  if (process.env.HERDR_BIN) return process.env.HERDR_BIN;
+  const local = process.env.HOME && `${process.env.HOME}/.local/bin/herdr`;
+  return local && existsSync(local) ? local : "herdr";
+}
+
+function readHerdrLabels(run = (args) =>
+  execFileSync(herdrBinary(), args, {
+    encoding: "utf8",
+    timeout: HERDR_LOOKUP_TIMEOUT_MS,
+    maxBuffer: 256 * 1024,
+    stdio: ["ignore", "pipe", "ignore"],
+  }),
+) {
+  let workspaces = new Map();
+  let tabs = new Map();
+  try {
+    workspaces = listResult(run(["workspace", "list"]), "workspaces", "workspace_id");
+  } catch {}
+  try {
+    tabs = listResult(run(["tab", "list"]), "tabs", "tab_id");
+  } catch {}
+  return { workspaces, tabs };
+}
+
+function createHerdrLabelLookup(read = readHerdrLabels) {
+  let labels;
+  return (data = {}) => {
+    labels ??= read();
+    const workspaceId = sourceText(data, "workspace_id", "workspaceId");
+    const tabId = sourceText(data, "tab_id", "tabId");
+    const workspaceLabel = workspaceId ? labels.workspaces.get(workspaceId) : undefined;
+    const tabLabel = tabId ? labels.tabs.get(tabId) : undefined;
+    return {
+      ...(workspaceLabel === undefined ? {} : { workspaceLabel }),
+      ...(tabLabel === undefined ? {} : { tabLabel }),
+    };
+  };
+}
+
+const herdrLabelLookup = createHerdrLabelLookup();
+
 function paneEvent(kind, data = {}) {
   const paneId = typeof data.pane_id === "string" ? data.pane_id.trim() : "";
   if (!paneId) return undefined;
@@ -53,18 +125,19 @@ function paneEvent(kind, data = {}) {
     timestamp: Date.now(),
   };
   const stringFields = [
-    ["session", "session"],
-    ["workspaceId", "workspace_id"],
-    ["tabId", "tab_id"],
-    ["label", "label"],
-    ["agentKind", "agent"],
-    ["status", "agent_status"],
-    ["error", "error"],
+    ["session", ["session"]],
+    ["workspaceId", ["workspace_id", "workspaceId"]],
+    ["workspaceLabel", ["workspace_label", "workspaceLabel"]],
+    ["tabId", ["tab_id", "tabId"]],
+    ["tabLabel", ["tab_label", "tabLabel"]],
+    ["label", ["label"]],
+    ["agentKind", ["agent"]],
+    ["status", ["agent_status", "status"]],
+    ["error", ["error"]],
   ];
-  for (const [target, source] of stringFields) {
-    if (typeof data[source] === "string" && data[source].trim()) {
-      event[target] = data[source].trim().slice(0, SUMMARY_LIMIT);
-    }
+  for (const [target, sources] of stringFields) {
+    const value = sourceText(data, ...sources);
+    if (value) event[target] = value;
   }
   if ((kind === "pane_closed" || kind === "pane_exited") && !event.status) {
     event.status = "closed";
@@ -89,7 +162,18 @@ function pluginData(payload) {
   return payload.data && typeof payload.data === "object" ? payload.data : payload;
 }
 
-function pluginEventFromEnvironment(environment = process.env) {
+function paneEventWithHerdrLabels(kind, data = {}, lookup = herdrLabelLookup) {
+  const labels = lookup(data);
+  return paneEvent(kind, {
+    ...data,
+    ...(labels.workspaceLabel === undefined
+      ? {}
+      : { workspace_label: labels.workspaceLabel }),
+    ...(labels.tabLabel === undefined ? {} : { tab_label: labels.tabLabel }),
+  });
+}
+
+function pluginEventFromEnvironment(environment = process.env, lookup = herdrLabelLookup) {
   const kindByPluginEvent = new Map([
     ["pane.created", "pane_created"],
     ["pane.closed", "pane_closed"],
@@ -99,7 +183,11 @@ function pluginEventFromEnvironment(environment = process.env) {
   const kind = kindByPluginEvent.get(environment.HERDR_PLUGIN_EVENT);
   if (!kind) return undefined;
   try {
-    return paneEvent(kind, pluginData(JSON.parse(environment.HERDR_PLUGIN_EVENT_JSON || "{}")));
+    return paneEventWithHerdrLabels(
+      kind,
+      pluginData(JSON.parse(environment.HERDR_PLUGIN_EVENT_JSON || "{}")),
+      lookup,
+    );
   } catch {
     return undefined;
   }
@@ -193,6 +281,9 @@ module.exports = {
   ConvexReporter,
   boundedSummary,
   configuredEndpoint,
+  createHerdrLabelLookup,
   paneEvent,
+  paneEventWithHerdrLabels,
   pluginEventFromEnvironment,
+  readHerdrLabels,
 };

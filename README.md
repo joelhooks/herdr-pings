@@ -40,7 +40,9 @@ HERDR_PINGS_CONVEX_URL=http://127.0.0.1:3211
 HERDR_PINGS_CONVEX_TOKEN=<the configured Convex ingest token>
 ```
 
-The bridge sends only pane/session metadata, status, bounded one-line turn summaries (280 characters), and token counts. It does not send raw scrollback. Events are batched in a bounded 100-event in-memory queue. If Convex is unavailable, the batch is dropped, a local dropped-events counter is logged, and the wake-loop spool/toasts continue unchanged.
+The bridge sends only pane/session metadata, status, bounded one-line turn summaries (280 characters), token counts, and the current Herdr workspace/tab labels. It does not send raw scrollback. Events are batched in a bounded 100-event in-memory queue. If Convex is unavailable, the batch is dropped, a local dropped-events counter is logged, and the wake-loop spool/toasts continue unchanged.
+
+The installed Herdr plugin is a copy, not a symlink. When changing `bridge/`, copy the changed files into `~/.config/herdr/plugins/github/herdr-pings-860238933156/bridge/` before verifying; otherwise the running plugin keeps the old behavior.
 
 The matching Convex endpoint is `POST /herdr-pings/ingest`; it requires `Authorization: Bearer <token>`. The API schema is v1. Event rows expire after seven days and are also hard-capped at 10,000 rows.
 

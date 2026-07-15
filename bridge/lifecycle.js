@@ -4,7 +4,7 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { ConvexReporter, paneEvent } = require("./convex-reporter.js");
+const { ConvexReporter, paneEventWithHerdrLabels } = require("./convex-reporter.js");
 
 const EVENT_NAMES = new Map([
   ["pane.exited", "pane_exited"],
@@ -104,7 +104,7 @@ function main() {
       onDrop: ({ count, droppedEvents, reason }) =>
         console.error(`herdr-pings: dropped ${count} Convex event(s), ${droppedEvents} total: ${reason}`),
     });
-    convex.enqueue(paneEvent(event, { ...data, ...record }));
+    convex.enqueue(paneEventWithHerdrLabels(event, { ...data, ...record }));
     void convex.flushNow();
     if (event === "pane_exited") {
       const label =

@@ -7,6 +7,7 @@ This repo contains:
 - `herdr-turn-ping/`: a Pi extension that appends one event after a run fully settles.
 - `herdr-ping-wait/`: a Bun CLI that waits for and consumes the next complete event.
 - `herdr-name-sync/`: a Pi extension that mirrors the session name onto the herdr pane label.
+- `herdr-scoreboard/`: a Pi extension that publishes `$task`, `$turn`, `$age`, and the blocked `NEEDS JOEL` label into Herdr's Agent sidebar.
 - `herdr-callsign/`: a Pi extension that gives each worker a Discworld identity as its herdr agent name (agent names are herdr send/wait targets), stamped onto spool events as `callsign`. The base name is stable per pane (300-resident Pratchett-dex); a Pratchett-register mood adjective is drawn per session — `Scunnered Vimes` today, `Chipper Vimes` tomorrow.
 - `bridge/` + `actions/` + `herdr-plugin.toml`: a herdr plugin that appends `pane_exited`/`pane_closed` to the same spool (crash detection for any pane), raises error-only toasts, and ships `setup`/`doctor` actions.
 
@@ -15,6 +16,7 @@ Preferred install is the herdr plugin: `herdr plugin install joelhooks/herdr-pin
 ## The fun parts
 
 - **Whois:** `herdr-whois` gives a live roll call with callsigns, pane labels, and each worker's latest event. Add `--all` to see the departed.
+- **Scoreboard trace:** `herdr-scoreboard-trace [pane_id]` returns current tokens, the last settled spool event, and recent structured reporter logs.
 - **The Luggage:** `herdr plugin action invoke luggage --plugin herdr-pings` eats only dead-pane spool debris older than seven days and orphaned cursor entries. It announces the menu before dining.
 - **Death notices:** closed and exited panes leave lifecycle events behind, with error-only toasts when a worker dies badly.
 - **Hex errors:** a failing doctor signs off with one of Hex's deeply unhelpful errors.
@@ -67,10 +69,12 @@ Clone the repo:
 gh repo clone joelhooks/herdr-pings "$HOME/Code/joelhooks/herdr-pings"
 ```
 
-Install the Pi extension:
+Install the Pi extensions:
 
 ```bash
+ln -sfn "$HOME/Code/joelhooks/herdr-pings/bridge" "$HOME/.pi/agent/extensions/bridge"
 ln -sfn "$HOME/Code/joelhooks/herdr-pings/herdr-turn-ping" "$HOME/.pi/agent/extensions/herdr-turn-ping"
+ln -sfn "$HOME/Code/joelhooks/herdr-pings/herdr-scoreboard" "$HOME/.pi/agent/extensions/herdr-scoreboard"
 ```
 
 Install the wait CLI:

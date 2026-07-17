@@ -10,6 +10,10 @@ const pluginRoot = process.env.HERDR_PLUGIN_ROOT?.trim()
 
 const links = [
   {
+    path: join(homedir(), ".pi", "agent", "extensions", "bridge"),
+    target: join(pluginRoot, "bridge"),
+  },
+  {
     path: join(homedir(), ".pi", "agent", "extensions", "herdr-turn-ping"),
     target: join(pluginRoot, "herdr-turn-ping"),
   },
@@ -22,12 +26,20 @@ const links = [
     target: join(pluginRoot, "herdr-callsign"),
   },
   {
+    path: join(homedir(), ".pi", "agent", "extensions", "herdr-scoreboard"),
+    target: join(pluginRoot, "herdr-scoreboard"),
+  },
+  {
     path: join(homedir(), ".local", "bin", "herdr-ping-wait"),
     target: join(pluginRoot, "herdr-ping-wait", "herdr-ping-wait.ts"),
   },
   {
     path: join(homedir(), ".local", "bin", "herdr-whois"),
     target: join(pluginRoot, "herdr-whois", "herdr-whois.ts"),
+  },
+  {
+    path: join(homedir(), ".local", "bin", "herdr-scoreboard-trace"),
+    target: join(pluginRoot, "actions", "scoreboard-trace.ts"),
   },
 ];
 const spoolDirectory = join(homedir(), ".local", "state", "herdr-pings");

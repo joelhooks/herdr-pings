@@ -13,9 +13,11 @@ const cursorPath = join(stateDir, "cursor.json");
 const pluginRoot = process.env.HERDR_PLUGIN_ROOT?.trim()
   ? resolve(process.env.HERDR_PLUGIN_ROOT)
   : resolve(import.meta.dir, "..");
+const expectedBridge = join(pluginRoot, "bridge");
 const expectedExtension = join(pluginRoot, "herdr-turn-ping");
 const expectedCli = join(pluginRoot, "herdr-ping-wait", "herdr-ping-wait.ts");
 const expectedWhois = join(pluginRoot, "herdr-whois", "herdr-whois.ts");
+const expectedScoreboardTrace = join(pluginRoot, "actions", "scoreboard-trace.ts");
 const hexErrors = [
   "+++ Out Of Cheese Error. Redo From Start +++",
   "+++ Divide By Cucumber Error. Please Reinstall Universe And Reboot +++",
@@ -78,6 +80,9 @@ async function inspectSpool(path: string): Promise<{ age: string; malformed: num
   return { age: age(info.mtimeMs), malformed, partial };
 }
 
+const bridge = await validLink(join(homedir(), ".pi", "agent", "extensions", "bridge"), expectedBridge);
+line(bridge.ok, "shared extension bridge", bridge.detail);
+
 const extension = await validLink(join(homedir(), ".pi", "agent", "extensions", "herdr-turn-ping"), expectedExtension);
 line(extension.ok, "pi extension", extension.detail);
 
@@ -86,6 +91,9 @@ line(nameSync.ok, "name-sync extension", nameSync.detail);
 
 const callsign = await validLink(join(homedir(), ".pi", "agent", "extensions", "herdr-callsign"), join(pluginRoot, "herdr-callsign"));
 line(callsign.ok, "callsign extension", callsign.detail);
+
+const scoreboard = await validLink(join(homedir(), ".pi", "agent", "extensions", "herdr-scoreboard"), join(pluginRoot, "herdr-scoreboard"));
+line(scoreboard.ok, "scoreboard extension", scoreboard.detail);
 
 const cli = await validLink(join(homedir(), ".local", "bin", "herdr-ping-wait"), expectedCli);
 let cliOnPath = false;
@@ -102,6 +110,14 @@ try {
   whoisOnPath = stdout.trim().length > 0;
 } catch {}
 line(whois.ok && whoisOnPath, "whois CLI", whois.ok ? (whoisOnPath ? `${whois.detail}; on PATH` : "valid symlink but not on PATH") : whois.detail);
+
+const scoreboardTrace = await validLink(join(homedir(), ".local", "bin", "herdr-scoreboard-trace"), expectedScoreboardTrace);
+let scoreboardTraceOnPath = false;
+try {
+  const { stdout } = await execFileAsync("sh", ["-lc", "command -v herdr-scoreboard-trace"], { timeout: 2_000 });
+  scoreboardTraceOnPath = stdout.trim().length > 0;
+} catch {}
+line(scoreboardTrace.ok && scoreboardTraceOnPath, "scoreboard trace", scoreboardTrace.ok ? (scoreboardTraceOnPath ? `${scoreboardTrace.detail}; on PATH` : "valid symlink but not on PATH") : scoreboardTrace.detail);
 
 try {
   await access(stateDir, constants.W_OK);

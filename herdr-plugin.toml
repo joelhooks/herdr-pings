@@ -1,8 +1,8 @@
 id = "herdr-pings"
 name = "Herdr Pings"
-version = "0.1.0"
-description = "Turn-level wake events for agents in herdr panes — appends pane lifecycle events to the herdr-pings spool and ships doctor/setup actions."
-min_herdr_version = "0.7.0"
+version = "0.2.0"
+description = "Turn-level wake events and live scoreboard metadata for agents in herdr panes."
+min_herdr_version = "0.7.4"
 platforms = ["macos", "linux"]
 
 [[events]]
@@ -36,3 +36,8 @@ command = ["bun", "actions/setup.ts"]
 id = "luggage"
 title = "Let the Luggage clean old spools"
 command = ["bun", "actions/luggage.ts"]
+
+[[actions]]
+id = "scoreboard-trace"
+title = "Trace herdr scoreboard metadata"
+command = ["bun", "actions/scoreboard-trace.ts"]

@@ -1,0 +1,58 @@
+---
+title: "Make agent start wait for a fresh split shell"
+type: "resource"
+status: "draft"
+created_at: "2026-07-24"
+---
+
+# Title
+
+Make `agent start --timeout` wait for a fresh split shell
+
+# Version
+
+Herdr 0.7.5, protocol 17, macOS
+
+# What happened
+
+During multi-agent fan-out, `herdr pane split` returned a new pane ID, but an immediate `herdr agent start` against that pane intermittently failed:
+
+```json
+{"error":{"code":"agent_pane_busy","message":"agent target pane <pane-id> is not an available shell"},"id":"cli:agent:start"}
+```
+
+The same start worked after an arbitrary `sleep 8`. Steering code now sleeps between every split and launch.
+
+`agent start` already exposes `--timeout` as "Wait for interactive readiness". However, `src/app/agents.rs:184-192` checks `available_shell_name(runtime)` before it creates the managed launch and timeout. If the fresh pane is not yet recognized as an available shell, the handler returns `TargetBusy` immediately. The timeout is only applied later to agent detection/readiness (`src/app/agents.rs:197-218`).
+
+# Minimal repro
+
+Run this several times if needed; the failure is timing-sensitive:
+
+```sh
+split="$(herdr pane split --current --direction right --cwd "$PWD")"
+pane="$(printf '%s' "$split" | jq -r '.result.pane.pane_id')"
+trap 'herdr pane close "$pane" >/dev/null 2>&1 || true' EXIT
+
+# Do not sleep between split and start.
+herdr agent start fresh-worker --kind pi --pane "$pane" --timeout 30000
+```
+
+For comparison, this usually succeeds against the same pane:
+
+```sh
+sleep 8
+herdr agent start fresh-worker --kind pi --pane "$pane" --timeout 30000
+```
+
+# Expected
+
+`agent start --timeout 30000` waits for the fresh pane to reach an interactive shell prompt, then starts the agent within the same timeout budget. It should fail only when the pane remains unavailable or the budget expires.
+
+# Actual
+
+The shell-readiness check can fail before the timeout starts. The command returns `agent_pane_busy` immediately even though the pane becomes ready moments later.
+
+# Suggested direction
+
+Please consider moving the available-shell check into the existing timed startup state, or adding a short shell-readiness phase that consumes the same `--timeout` budget. A timeout error should remain distinct from a pane that is genuinely occupied by another process.

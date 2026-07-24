@@ -1,0 +1,65 @@
+---
+title: "Keep agent start names stable when display names change"
+type: "resource"
+status: "draft"
+created_at: "2026-07-24"
+---
+
+# Title
+
+Keep `agent start` names stable when display names change
+
+# Version
+
+Herdr 0.7.5, protocol 17, macOS
+
+# What happened
+
+We launched a Pi worker with an explicit operator name:
+
+```sh
+herdr agent start cw-assessapi --kind pi --pane <pane-id>
+```
+
+The launch succeeded. An extension later called `herdr agent rename <pane-id> <callsign>`. After that rename, the original control target stopped resolving:
+
+```json
+{"error":{"code":"agent_not_found","message":"agent target cw-assessapi not found"},"id":"cli:agent:prompt"}
+```
+
+This made the name supplied to `agent start` unsafe as a long-lived target for `agent prompt` and `agent wait`.
+
+The behavior follows the current model. `src/app/agents.rs:112-133` lets `agent rename` replace the terminal's single `agent_name`. `src/app/terminal_targets.rs:75-104` resolves an agent target from the current `agent_name`, so the previous name no longer resolves.
+
+Our callsign extension tries not to overwrite an existing name. In `herdr-callsign/index.ts:128-169`, it finds the current pane in `herdr agent list`, adopts a non-empty `name`, and only assigns a callsign when that field is empty. There is still a detection race: the pane can be listed as an agent before the operator name is visible to that sample. The extension then believes the name is unowned and renames it. Pane-label synchronization is separate decoration, but it made the authority boundary harder to understand during the incident.
+
+# Minimal repro
+
+Run this from a Herdr shell with `jq` installed:
+
+```sh
+split="$(herdr pane split --current --direction right --cwd "$PWD")"
+pane="$(printf '%s' "$split" | jq -r '.result.pane.pane_id')"
+trap 'herdr pane close "$pane" >/dev/null 2>&1 || true' EXIT
+
+herdr agent start stable-worker --kind pi --pane "$pane" --timeout 30000
+herdr agent get stable-worker
+
+# Stand in for a naming or display extension.
+herdr agent rename "$pane" decorated-worker
+
+herdr agent prompt stable-worker 'Reply with OK'
+herdr agent get decorated-worker
+```
+
+# Expected
+
+`stable-worker`, the name chosen at launch, remains a valid prompt/wait target for that agent's lifetime. A later display-name change may affect labels or decorations without invalidating the control target.
+
+# Actual
+
+`agent rename` replaces the only name. `herdr agent prompt stable-worker ...` fails with `agent_not_found`; only `decorated-worker` and the pane ID still resolve.
+
+# Suggested direction
+
+Please choose the naming authority that fits Herdr's design. Possible shapes include a protected launch/control name plus a separate display name, preserving the launch name as an alias, or emitting a rename event with old and new targets so controllers can re-target. The main request is a stable operator-selected target, not a specific storage model.

@@ -1,0 +1,44 @@
+---
+title: "Refine the herdr orchestration integration"
+type: "project"
+status: "done"
+created_at: "2026-07-24"
+---
+
+# Refine the herdr orchestration integration
+
+Joel (2026-07-24): "we've used it a LOT the past few days — does it need refinement?" Yes. Field defects observed during the mega-dev fan-outs (steering session `MEGA LFG 🔥`, workspace w25, 2026-07-24, 9 workers across two waves). Each item below was hit for real, most repeatedly.
+
+## Observed defects, with receipts
+
+1. **Stale event replay in `herdr-ping-wait`.** The same `turn_ended` event for pane `w25:p2V` (callsign cw-bridge, timestamps 16:18:37 and 16:19:11) was delivered again by LATER waiter invocations, twice. The skill promises "consumed events never re-fire" via byte offsets in `cursor.json`. Suspects: overlapping waiters racing the cursor file; a waiter killed at its timeout (exit 2 path) not persisting offsets; or a pi session restart in the same pane rewinding/rewriting the spool. Steering fell back to polling step-file frontmatter. Reproduce, fix, add a regression test to the plugin.
+2. **Launch names clobbered by name-sync/callsign.** `herdr agent start cw-assessapi --kind pi …` succeeded, then the herdr-pings extensions renamed the agent (`assessment-api` on the pane label, callsign in the spool), and `herdr agent prompt cw-assessapi` failed `agent_not_found`. The operator-chosen `agent start` name should be the stable prompt/wait target for the agent's lifetime — extensions should decorate, not replace. Decide the naming authority and enforce it.
+3. **`agent_pane_busy` on fresh splits.** `pane split` returns before the shell is prompt-ready; an immediate `agent start` fails. Steering hand-rolls `sleep 8`. `agent start` should wait for shell readiness itself (it already has a `--timeout`).
+4. **`turn_ended` is ambiguous.** A worker pausing to ask a boundary question and a worker finishing its task emit the identical event; steering must read the pane every wake. Options: a `task_settled` event when the pi session prints a conventional DONE marker; or include a classified tail (question vs summary) in the event. Even `last_message_tail` is sometimes absent (observed both shapes).
+5. **Early-crash blind spot** (known since 2026-07-24 pre-compaction): a pi worker dying before its first turn leaves no spool file, so no `pane_exited` wake fires from the pings bridge. Steering compensates with staggered launches + 100-second claim-file survival checks. The bridge should emit a synthetic event when a watched pane's agent exits before first spool write.
+6. **Waiter lifetime vs harness timeouts.** Steering re-arms `herdr-ping-wait` every ~10 minutes because harness background tasks cap at 10 minutes; every quiet window costs a wasted wake/turn. Consider a `--once-per-event` daemon mode writing to a file the harness can tail, or document the Monitor-tool pattern as canonical.
+7. **Output ergonomics.** `herdr agent read` returns JSON sometimes and raw hard-wrapped terminal text other times (narrow worker panes mangle text; steering pipes through `tr -d '\n' | sed`). A `--format text --unwrap` that reflows would remove a whole class of parsing glue.
+8. **Skill drift vs new repo law.** mega-dev CONVENTIONS.md (2026-07-24) now mandates worktree-per-worker: dedicated branch + worktree per worker, workers commit on their own branch, steering merges via a harvest gate. The `herdr-orchestration` fleet skill still teaches shared-cwd pane splits as the default and says "workers don't commit." Update the skill (dark-wizard `skills/`) to make worktree isolation the default fan-out shape, with shared-cwd as the documented exception; fold in the survival-check and claim-file patterns that proved out.
+
+## What proved out and should be codified (not changed)
+
+- Claim-before-work in step-file frontmatter as the liveness signal (survival check = grep for assignee).
+- `agent prompt` for atomic task delivery; briefs as durable `.svx` files.
+- The 2/3-width steering pane + right worker column, panes closed with truthful harvest receipts.
+- Ping-wait as multi-pane fan-in when its cursor behaves.
+
+## Boundaries
+
+- herdr core defects (2, 3, 4-partial, 7) may need upstream issues/PRs to `ogulcancelik/herdr` — write them as minimal repros; do not fork herdr.
+- Plugin defects (1, 5, 6) land in this repo (`herdr-pings`) with tests.
+- Skill updates land in `~/Code/joelhooks/dark-wizard/skills/herdr-orchestration/` and sync fleet-wide (commit + push dark-wizard; `scripts/fleet-graft.sh install` refreshes prompts).
+- Do not disturb the live mega-dev workspace (w25) or its workers. Read-only inspection of its spools/cursor is fine.
+- Nothing here touches mega-dev repo law.
+
+## Resolution (2026-07-24, same day)
+
+- **1 (stale-cursor replay)** — fixed in `herdr-ping-wait.ts`: exclusive `<cursor>.lock` around every cursor read-modify-write, fresh reload inside the lock, consume touches only its own spool's offset; recreated-smaller spools restart at 0; Luggage cursor pruning uses the same lock. Regression tests in `herdr-ping-wait/herdr-ping-wait.test.ts` (commit ade56d8). Root cause was the wholesale rewrite of the whole in-memory cursor map by long-lived waiters.
+- **5 (early-crash blind spot)** — `pane.agent_status_changed` routes through `bridge/lifecycle.js`; agent-status sidecars + empty-spool guard emit synthetic `agent_exited_early` (commit bac5d26, tests in `bridge/lifecycle.test.ts`). `done` status is NOT an exit signal (= settled unseen); label disappearance is.
+- **6 (waiter lifetime)** — `--follow [--output <file>]` daemon mode (commit ade56d8); detached-daemon + file-tail documented as canonical in `herdr-ping-wait/README.md` and the fleet skill.
+- **2, 3, 4, 7 (herdr core)** — paste-ready upstream issue drafts with verified source citations in `.brain/resources/upstream-issue-{agent-naming-authority,agent-start-readiness,turn-settled-signal,agent-read-unwrap}.svx` (drafted by worker issue-drafter, citations spot-checked by steering). Not yet filed.
+- **8 (skill drift)** — dark-wizard `skills/herdr-orchestration/SKILL.md` commit 0bf97ac: worktree-per-worker default, shared-cwd exception, claim/survival patterns, turn_ended classification, follow-daemon pattern, new gotchas.

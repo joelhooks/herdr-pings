@@ -1,0 +1,75 @@
+---
+title: "Make agent read text and unwrap behavior explicit"
+type: "resource"
+status: "draft"
+created_at: "2026-07-24"
+---
+
+# Title
+
+Make `agent read` text and unwrap behavior explicit and predictable
+
+# Version
+
+Herdr 0.7.5, protocol 17, macOS
+
+# What happened
+
+Steering code reads workers in narrow panes. The default command preserves terminal row wrapping, so a sentence can arrive as several newline-delimited rows. Operators worked around this with destructive pipelines such as:
+
+```sh
+herdr agent read worker-a | tr -d '\n' | sed 's/.../.../'
+```
+
+That can also remove real line breaks.
+
+Herdr 0.7.5 already contains most of the requested mechanism, but it is expressed as a snapshot source rather than an `--unwrap` option:
+
+- `--source visible` returns the current viewport. With `--lines`, `src/app/api_helpers.rs:128-130` takes the last requested rows.
+- `--source recent` returns recent terminal rows and preserves visual soft-wrap newlines.
+- `--source recent-unwrapped` joins Ghostty soft-wrapped rows. `src/app/api_helpers.rs:114-123` routes to `recent_unwrapped_text`/`recent_unwrapped_ansi`; the regression test at `src/pane/terminal.rs:4285-4293` turns `ABCDE\nFGHIJ\n` into `ABCDEFGHIJ`.
+- `--source detection` returns the bottom-of-terminal detector snapshot, not the user's scrolled viewport (`src/pane/terminal.rs:4244-4260`). It is for detection, not transcript reflow.
+
+`recent-unwrapped` only removes terminal soft wraps. It correctly preserves hard newlines written by the program. It does not infer paragraphs, repair formatting that the program emitted as real newlines, or merge distinct list/code lines.
+
+The "JSON sometimes" observation is also reproducible and narrower than first reported. Successful `agent read` calls print only `result.read.text`; error paths print the JSON error envelope to stderr (`src/cli.rs:60-69`). For example, a stale renamed target produces JSON while a valid target produces raw text.
+
+# Minimal repro
+
+Create a deliberately narrow shell pane and print one soft-wrapped line plus one hard newline:
+
+```sh
+split="$(herdr pane split --current --direction right --ratio 0.2 --cwd "$PWD")"
+pane="$(printf '%s' "$split" | jq -r '.result.pane.pane_id')"
+trap 'herdr pane close "$pane" >/dev/null 2>&1 || true' EXIT
+
+# Wait only to keep this read-focused repro independent of fresh-split readiness.
+sleep 3
+herdr pane run "$pane" 'for i in $(seq 1 60); do echo filler-$i; done; printf "%s\n%s\n" "one deliberately long sentence that must wrap across several narrow terminal rows" "SECOND HARD LINE"'
+sleep 1
+
+herdr pane read "$pane" --source recent --format text --lines 25
+herdr pane read "$pane" --source recent-unwrapped --format text --lines 25
+```
+
+The same source behavior applies through `herdr agent read <target>` after an agent is started in the pane:
+
+```sh
+herdr agent read worker-a --source recent --format text --lines 20
+herdr agent read worker-a --source recent-unwrapped --format text --lines 20
+
+# A read error switches to a JSON envelope on stderr.
+herdr agent read no-such-agent --source recent-unwrapped --format text
+```
+
+# Expected
+
+The CLI makes the safe plain-text reflow path obvious, ideally as `--format text --unwrap` or a clearly documented equivalent. It preserves real hard newlines and has a predictable contract for success and error output that shell callers can select explicitly.
+
+# Actual
+
+The default `recent` source preserves narrow-pane soft wraps. The existing `recent-unwrapped` source fixes those wraps, but its purpose is easy to miss because unwrap is encoded as a source choice. Success is raw text while failures are JSON envelopes, so a caller that captures both streams can receive two different shapes.
+
+# Suggested direction
+
+The existing `recent-unwrapped` implementation appears sound. Please consider documenting it as the canonical agent-transcript read mode and adding `--unwrap` as a discoverable alias if that fits the CLI. A separate `--output text|json` (or equivalent) could make error-shape behavior explicit without changing the useful raw-text default.

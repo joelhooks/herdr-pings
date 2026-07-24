@@ -1,0 +1,43 @@
+---
+title: "Draft upstream herdr issues for orchestration defects 2, 3, 4, 7"
+type: "task"
+status: "done"
+created_at: "2026-07-24"
+assignee: "ShitRat"
+---
+
+# Draft upstream herdr issues (minimal repros, no fork)
+
+Context: `.brain/projects/refine-orchestration-integration.svx` in this repo lists eight field defects from the 2026-07-24 mega-dev fan-outs. Four are herdr-core defects that need **upstream issue drafts** for `ogulcancelik/herdr`. Your job: write the drafts. Do NOT fork herdr, do NOT patch herdr source, do NOT open real GitHub issues — drafts only.
+
+## Ground rules
+
+- Local herdr source checkout for reference: `~/Code/joelhooks/herdr` (read-only; cite files/lines).
+- Verified environment: herdr 0.7.5, protocol 17, macOS.
+- Claim before work: set `assignee` in this file's frontmatter to your callsign/agent name before starting.
+- Deliverables: one file per issue in `.brain/resources/` of THIS repo (`~/Code/joelhooks/herdr-pings`):
+  - `.brain/resources/upstream-issue-agent-naming-authority.svx` (defect 2)
+  - `.brain/resources/upstream-issue-agent-start-readiness.svx` (defect 3)
+  - `.brain/resources/upstream-issue-turn-settled-signal.svx` (defect 4)
+  - `.brain/resources/upstream-issue-agent-read-unwrap.svx` (defect 7)
+- Format per file: YAML frontmatter (`title`, `type: "resource"`, `status: "draft"`, `created_at: "2026-07-24"`), then a ready-to-paste GitHub issue body: **Title**, **Version** (0.7.5 / protocol 17), **What happened** (the field observation, keep the receipts), **Minimal repro** (exact commands someone else can run), **Expected**, **Actual**, **Suggested direction** (short, deferential — the maintainer owns the design).
+- Where herdr source explains the behavior, cite the file (e.g. `src/app/api_helpers.rs` maps `(Idle, seen=false)` → `done`). Keep citations accurate — read the code before citing it.
+- Do not commit. Print a DONE summary listing the four files when finished.
+
+## The four defects (from the project brief, observed 2026-07-24)
+
+**Defect 2 — launch names clobbered, naming authority unclear.**
+`herdr agent start cw-assessapi --kind pi …` succeeded; plugin extensions later renamed the agent (pane label sync + callsign), and `herdr agent prompt cw-assessapi` failed `agent_not_found`. The operator-chosen `agent start` name should stay a stable prompt/wait target for the agent's lifetime; extensions should decorate, not replace. The repro can use `herdr agent rename` from a second terminal to stand in for any extension. Suggested direction: e.g. a protected/owner name distinct from display decorations, or `agent start` names win over later renames, or rename emits an event so waiters can re-target. Note the interplay: this repo's `herdr-callsign` extension adopts an existing name if present (see `herdr-callsign/index.ts`), but a race at detection time can still clobber — describe the race precisely.
+
+**Defect 3 — `agent_pane_busy` on fresh splits.**
+`pane split` returns before the shell is prompt-ready; an immediate `agent start` fails with `agent_pane_busy`. Steering sessions hand-roll `sleep 8`. `agent start` already takes `--timeout`; it should wait for shell readiness within that budget instead of failing fast. Repro: `herdr pane split … --cwd <repo>` then immediately `herdr agent start w1 --kind pi --pane <new_pane>`.
+
+**Defect 4 — `turn_ended` is ambiguous (question vs finished).**
+A worker pausing to ask a boundary question and a worker finishing its task produce identical settle signals; steering must read the pane every wake. Also relevant upstream: `agent_status` "done" means "idle + unseen" (`src/app/api_helpers.rs`), not "task complete". Suggested direction: a `task_settled`-style event or a classified tail (question vs summary) on the settle event; alternatively a documented convention plugins can hook. Mention that even the tail text is sometimes absent from downstream lifecycle events (we observed both shapes on pane `w25:p2V`, timestamps 16:18:37 without tail, 16:19:11 with tail — that spool line lives in `~/.local/state/herdr-pings/w25-p2V.jsonl` if you want to quote it).
+
+**Defect 7 — `herdr agent read` output ergonomics.**
+`agent read` returns JSON sometimes and raw hard-wrapped terminal text other times; narrow worker panes hard-wrap text so steering pipes through `tr -d '\n' | sed`. Ask for `--format text --unwrap` (reflow hard-wrapped lines) or equivalent. Check `herdr agent read --help` and the `--source` variants (`recent-unwrapped`, `visible`) first and describe exactly what each currently returns — the issue must be precise about what `recent-unwrapped` does and does not unwrap. Repro with a deliberately narrow pane.
+
+## Definition of done
+
+Four `.svx` files in `.brain/resources/`, each a paste-ready issue draft with a runnable minimal repro, accurate source citations, and no invented behavior. DONE summary lists the files with one-line status each.

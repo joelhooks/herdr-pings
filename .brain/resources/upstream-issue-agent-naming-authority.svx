@@ -60,6 +60,25 @@ herdr agent get decorated-worker
 
 `agent rename` replaces the only name. `herdr agent prompt stable-worker ...` fails with `agent_not_found`; only `decorated-worker` and the pane ID still resolve.
 
+# Verified live (2026-07-24, herdr 0.7.5, macOS)
+
+Ran the repro verbatim: `agent start stable-worker` succeeded; `agent rename <pane> decorated-worker` succeeded; then:
+
+```json
+{"error":{"code":"agent_not_found","message":"agent target stable-worker not found"},"id":"cli:agent:prompt"}
+```
+
+`decorated-worker` and the pane id both still resolved.
+
+# Source trace
+
+- The name is a single mutable slot: `agent_name: Option<String>` on `TerminalState` (`src/terminal/state.rs:112`). `agent rename` (`src/app/agents.rs:112-135`) overwrites it unconditionally via `set_agent_name`/`clear_agent_name` — last writer wins, and nothing records *who* wrote it.
+- The adjacent `agent_name_owner` field (`src/terminal/state.rs:89-92`, set in `set_agent_name` at `1367-1392`, reconciled at `1551+`) binds the name to the current agent **occupant** (agent label + session ref) so the name auto-clears when a different agent or session takes the pane. It is occupant-binding, not writer authority — it cannot distinguish the operator's launch name from an extension's decoration.
+- Target resolution compares raw string equality against the current `agent_name` (`src/app/terminal_targets.rs:61, 96`), so the previous name stops resolving the instant it is overwritten.
+- The rename is effectively invisible to controllers: it emits only `pane.updated` (`emit_pane_updated`, end of the rename handler), and `pane.updated` is deliberately excluded from plugin hook events as high-volume (`src/api/schema/events.rs:350`). A waiter holding the old name cannot even subscribe to learn it was re-targeted.
+
+Pattern: a single-writer name slot with occupant-binding but no writer authority and no observable rename.
+
 # Suggested direction
 
-Please choose the naming authority that fits Herdr's design. Possible shapes include a protected launch/control name plus a separate display name, preserving the launch name as an alias, or emitting a rename event with old and new targets so controllers can re-target. The main request is a stable operator-selected target, not a specific storage model.
+Please choose the naming authority that fits Herdr's design. Possible shapes include a protected launch/control name plus a separate display name, preserving the launch name as an alias, or emitting a rename event with old and new targets so controllers can re-target (today `pane.updated` is the only signal and plugin hooks exclude it). The main request is a stable operator-selected target, not a specific storage model.

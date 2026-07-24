@@ -61,6 +61,23 @@ A steering client can distinguish "settled and needs input" from "settled and re
 
 The lifecycle reports idle/done/blocked state, but idle/done does not encode task intent. A question and a completion summary can produce equivalent settle signals.
 
+# Verified live (2026-07-24, herdr 0.7.5, macOS)
+
+Ran both prompts against the same Pi worker with `--wait --timeout 120000`:
+
+- "Ask me which of two files you should change, then stop." → settled, `agent_status: "idle"`.
+- "Reply exactly: DONE: no changes needed." → settled, `agent_status: "idle"`.
+
+Identical status both times; only reading the pane distinguishes them.
+
+# Source trace
+
+- Detection state (`crate::detect::AgentState`) plus a per-pane `seen: bool` map into the public `AgentStatus` enum via `pane_agent_status` (`src/app/api_helpers.rs:91-102`): `(Idle, seen=false)` → `Done`, `(Idle, seen=true)` → `Idle`.
+- `seen` is UI attention, not task semantics: `apply_pane_state_change` (`src/app/actions.rs:2962-2988`) forces `seen = true` while non-idle and, on a completion transition, leaves `seen = true` only when the pane sits in the focused active tab; `switch_tab` (`src/workspace.rs:444-452`) marks every pane in a viewed tab seen. So `done` literally encodes "settled while unfocused".
+- The wire type `PaneAgentStatusChangedEvent` (`src/api/schema/events.rs:393-405`) carries `agent_status`, agent label, title/presentation fields — nothing about the settled output. There is no field a client could use to classify question vs completion even if the server knew.
+
+Pattern: UI-attention semantics exposed on the wire where steering clients need task semantics; the event type has no slot for settled-output context.
+
 # Suggested direction
 
 Please choose the least opinionated contract that fits Herdr. Options include a `task_settled`-style event for an explicit agent convention, a bounded settled-output tail on the status event, or a documented plugin hook for classification. The core should not guess task completion from arbitrary prose unless the convention is explicit.

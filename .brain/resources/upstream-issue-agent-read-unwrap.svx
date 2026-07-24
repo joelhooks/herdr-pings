@@ -70,6 +70,32 @@ The CLI makes the safe plain-text reflow path obvious, ideally as `--format text
 
 The default `recent` source preserves narrow-pane soft wraps. The existing `recent-unwrapped` source fixes those wraps, but its purpose is easy to miss because unwrap is encoded as a source choice. Success is raw text while failures are JSON envelopes, so a caller that captures both streams can receive two different shapes.
 
+# Verified live (2026-07-24, herdr 0.7.5, macOS)
+
+Narrow pane (0.25 ratio), one long sentence plus one hard newline, after the content entered scrollback:
+
+```
+== recent (soft wraps preserved):
+one deliberately long sentence that must wrap across several
+ narrow terminal rows in this pane
+SECOND-HARD-LINE
+== recent-unwrapped (reflowed):
+one deliberately long sentence that must wrap across several narrow terminal rows in this pane
+SECOND-HARD-LINE
+```
+
+`recent-unwrapped` reflowed the soft wrap and preserved the hard newline, as the source promises. Error shape confirmed: `herdr agent read no-such-agent` printed `{"error":{"code":"agent_not_found",...}}` to stderr while success prints raw text to stdout.
+
+One additional finding from running the repro: **`recent` and `recent-unwrapped` are scrollback-backed and return empty text until rows scroll off the viewport.** A short worker session whose whole transcript still fits on screen is invisible to both; only `--source visible` sees it. That edge probably belongs in the same documentation pass — steering code that reads a young pane gets `""` from the "canonical" sources and may misread it as no output.
+
+# Source trace
+
+- `ReadSource { Visible, Recent, RecentUnwrapped, Detection }` and `ReadFormat { Text, Ansi }` (`src/api/schema/common.rs:61-77`) — unwrap is encoded as a source choice, not a modifier on a source.
+- Routing in `src/app/api_helpers.rs:105-130`; the reflow is `recent_unwrapped_text` joining Ghostty soft-wrapped rows, regression-tested at `src/pane/terminal.rs:4285-4293` (`"ABCDE\nFGHIJ\n"` → `"ABCDEFGHIJ"`).
+- Output shape split: `print_read_response` (`src/cli.rs:60-69`) prints `result.read.text` raw to stdout on success and the JSON error envelope to stderr on failure — two different shapes for a caller capturing both streams.
+
+Pattern: the safe reflow path exists but hides behind a source name, and the success/error contract spans two streams with two encodings.
+
 # Suggested direction
 
-The existing `recent-unwrapped` implementation appears sound. Please consider documenting it as the canonical agent-transcript read mode and adding `--unwrap` as a discoverable alias if that fits the CLI. A separate `--output text|json` (or equivalent) could make error-shape behavior explicit without changing the useful raw-text default.
+The existing `recent-unwrapped` implementation appears sound. Please consider documenting it as the canonical agent-transcript read mode and adding `--unwrap` as a discoverable alias if that fits the CLI. A separate `--output text|json` (or equivalent) could make error-shape behavior explicit without changing the useful raw-text default. Documenting the scrollback-backed empty-result edge (or falling back to `visible` when scrollback is empty) would remove the remaining surprise.

@@ -53,6 +53,30 @@ herdr agent start fresh-worker --kind pi --pane "$pane" --timeout 30000
 
 The shell-readiness check can fail before the timeout starts. The command returns `agent_pane_busy` immediately even though the pane becomes ready moments later.
 
+# Verified live (2026-07-24, herdr 0.7.5, macOS)
+
+Six fresh-split + immediate-start attempts, `--timeout 30000`, zsh with rc-file prompt tooling (starship/atuin):
+
+```
+attempt 1: agent_pane_busy REPRODUCED
+attempt 2: started clean
+attempt 3: agent_pane_busy REPRODUCED
+attempt 4: started clean
+attempt 5: agent_pane_busy REPRODUCED
+attempt 6: agent_pane_busy REPRODUCED
+```
+
+The failures returned instantly — the 30-second budget was never consumed.
+
+# Source trace
+
+- Entry: `agent start` handler, `src/app/agents.rs:176-218`.
+- The readiness predicate runs **once, synchronously**, before the timed launch exists: `available_shell_name` (`src/app/agents.rs:190-191, 412-418`) → `available_pane_shell` (`src/platform/macos.rs:322-324`) → `available_pane_shell_from_job` (`src/platform/mod.rs:163-174`).
+- That predicate requires the pane's foreground job to be exactly the lone shell: `process_group_id == child_pid`, every process in the job is `child_pid` itself, and the process name passes `is_pane_shell_process_name`. A fresh split still running rc-file children (prompt frameworks, history daemons) has extra processes in the job → `None` → `AgentStartError::TargetBusy` → wire code `agent_pane_busy` (`src/app/agents.rs:253-255`).
+- The `--timeout` budget only begins afterwards, in `begin_managed_agent` (`src/terminal/state.rs:1394-1417`), whose `ManagedAgentPhase::Pending { ready_after, deadline, .. }` machinery already models "waiting for a state within a deadline".
+
+Pattern: a one-shot synchronous predicate guards entry to a state machine that already knows how to wait.
+
 # Suggested direction
 
-Please consider moving the available-shell check into the existing timed startup state, or adding a short shell-readiness phase that consumes the same `--timeout` budget. A timeout error should remain distinct from a pane that is genuinely occupied by another process.
+Please consider moving the available-shell check into the existing timed startup state (`ManagedAgentPhase::Pending` already carries `ready_after`/`deadline`), or adding a short shell-readiness phase that consumes the same `--timeout` budget. A timeout error should remain distinct from a pane that is genuinely occupied by another process.

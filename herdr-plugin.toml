@@ -13,13 +13,16 @@ command = ["bun", "bridge/lifecycle.js"]
 on = "pane.closed"
 command = ["bun", "bridge/lifecycle.js"]
 
+# Status changes route through lifecycle.js: it forwards to Convex AND owns
+# the early-crash watchdog (synthetic agent_exited_early on agents that die
+# before their first spool write).
+[[events]]
+on = "pane.agent_status_changed"
+command = ["bun", "bridge/lifecycle.js"]
+
 # Convex-only hooks are additive: they never touch the production spool files.
 [[events]]
 on = "pane.created"
-command = ["bun", "bridge/convex-event.js"]
-
-[[events]]
-on = "pane.agent_status_changed"
 command = ["bun", "bridge/convex-event.js"]
 
 [[actions]]

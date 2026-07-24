@@ -9,7 +9,7 @@ This repo contains:
 - `herdr-name-sync/`: a Pi extension that mirrors the session name onto the herdr pane label.
 - `herdr-scoreboard/`: a Pi extension that publishes `$task`, `$turn`, `$age`, and the blocked `NEEDS JOEL` label into Herdr's Agent sidebar.
 - `herdr-callsign/`: a Pi extension that gives each worker a Discworld identity as its herdr agent name (agent names are herdr send/wait targets), stamped onto spool events as `callsign`. The base name is stable per pane (300-resident Pratchett-dex); a Pratchett-register mood adjective is drawn per session — `Scunnered Vimes` today, `Chipper Vimes` tomorrow.
-- `bridge/` + `actions/` + `herdr-plugin.toml`: a herdr plugin that appends `pane_exited`/`pane_closed` to the same spool (crash detection for any pane), raises error-only toasts, and ships `setup`/`doctor` actions.
+- `bridge/` + `actions/` + `herdr-plugin.toml`: a herdr plugin that appends `pane_exited`/`pane_closed` to the same spool (crash detection for any pane), emits a synthetic `agent_exited_early` when an agent dies before its first spool write (early-crash watchdog), raises error-only toasts, and ships `setup`/`doctor` actions.
 
 Preferred install is the herdr plugin: `herdr plugin install joelhooks/herdr-pings`, then invoke the `setup` action. The manual symlink steps below remain for pi-only use.
 
@@ -27,7 +27,7 @@ Preferred install is the herdr plugin: `herdr plugin install joelhooks/herdr-pin
 
 Events are appended to `~/.local/state/herdr-pings/<pane-id-with-dashes>.jsonl`. Each JSONL record requires:
 
-- `event`: currently `turn_ended` or `turn_error`
+- `event`: currently `turn_ended`, `turn_error`, `pane_exited`, `pane_closed`, or `agent_exited_early`
 - `pane_id`: the raw herdr pane ID
 - `timestamp`: an ISO-8601 UTC timestamp
 

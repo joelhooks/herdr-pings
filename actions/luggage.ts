@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { execFile } from "node:child_process";
-import { readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -10,6 +10,41 @@ const execFileAsync = promisify(execFile);
 const stateDir = join(homedir(), ".local", "state", "herdr-pings");
 const cursorPath = join(stateDir, "cursor.json");
 const thresholdMs = 7 * 24 * 60 * 60 * 1_000;
+const lockStaleMs = 10_000;
+const lockAcquireTimeoutMs = 30_000;
+
+// Same lock protocol as herdr-ping-wait: cursor.json is shared with live
+// waiters, so read-modify-write must happen under <cursor>.lock.
+async function withCursorLock<T>(fn: () => Promise<T>): Promise<T> {
+  const lockPath = `${cursorPath}.lock`;
+  const deadline = Date.now() + lockAcquireTimeoutMs;
+  while (true) {
+    try {
+      const handle = await open(lockPath, "wx");
+      try {
+        await handle.writeFile(`${process.pid}\n`, "utf8");
+      } finally {
+        await handle.close();
+      }
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      try {
+        if (Date.now() - (await stat(lockPath)).mtimeMs > lockStaleMs) {
+          await unlink(lockPath).catch(() => {});
+          continue;
+        }
+      } catch {}
+      if (Date.now() >= deadline) throw new Error(`could not acquire ${lockPath}`);
+      await new Promise((resolveSleep) => setTimeout(resolveSleep, 25));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    await unlink(lockPath).catch(() => {});
+  }
+}
 
 type Meal = { kind: "spool" | "cursor"; path: string; display: string; reason: string };
 
@@ -82,14 +117,24 @@ try {
       await unlink(meal.path);
       console.log(`The Luggage ate ${meal.display} (${meal.reason}).`);
     }
-    if (cursor) {
-      for (const meal of meals.filter((item) => item.kind === "cursor")) {
-        delete cursor[meal.path];
-        console.log(`The Luggage ate cursor entry ${meal.display} (${meal.reason}).`);
-      }
-      const temporary = `${cursorPath}.${process.pid}.tmp`;
-      await writeFile(temporary, `${JSON.stringify(cursor, null, 2)}\n`, "utf8");
-      await rename(temporary, cursorPath);
+    const doomedCursorEntries = meals.filter((item) => item.kind === "cursor");
+    if (cursor && doomedCursorEntries.length > 0) {
+      await withCursorLock(async () => {
+        // Reload inside the lock: live waiters may have moved offsets since scan.
+        let fresh: Record<string, number>;
+        try {
+          fresh = JSON.parse(await readFile(cursorPath, "utf8")) as Record<string, number>;
+        } catch {
+          return;
+        }
+        for (const meal of doomedCursorEntries) {
+          delete fresh[meal.path];
+          console.log(`The Luggage ate cursor entry ${meal.display} (${meal.reason}).`);
+        }
+        const temporary = `${cursorPath}.${process.pid}.tmp`;
+        await writeFile(temporary, `${JSON.stringify(fresh, null, 2)}\n`, "utf8");
+        await rename(temporary, cursorPath);
+      });
     }
     console.log(`The Luggage is satisfied. ${meals.length} item${meals.length === 1 ? "" : "s"} consumed.`);
   }
